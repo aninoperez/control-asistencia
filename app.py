@@ -11,35 +11,62 @@ EXCEL_FILE = "LISTAS OCTUBRE (1).xlsx"
 REGISTROS_FILE = "registros_asistencia.csv"
 
 
-# --- CARGAR LISTA DE ESTUDIANTES DESDE EL EXCEL ---
+# --- CARGAR LISTA DE ESTUDIANTES DIRECTAMENTE DE LAS PESTAÑAS DEL EXCEL ---
 @st.cache_data
 def cargar_estudiantes():
   try:
-    # Usamos la hoja maestra 'proc9324961' que contiene todos los estudiantes y grupos
-    df_proc = pd.read_excel(EXCEL_FILE, sheet_name="proc9324961")
+    xls = pd.ExcelFile(EXCEL_FILE)
+    hojas_grados = [s for s in xls.sheet_names if s != "proc9324961"]
+    master_list = []
 
-    # Construir el nombre completo limpiando espacios nulos
-    df_proc["NOMBRE_ESTUDIANTES"] = (
-        df_proc["NOMBRE1"].fillna("")
-        + " "
-        + df_proc["NOMBRE2"].fillna("")
-        + " "
-        + df_proc["APELLIDO1"].fillna("")
-        + " "
-        + df_proc["APELLIDO2"].fillna("")
-    )
-    df_proc["NOMBRE_ESTUDIANTES"] = (
-        df_proc["NOMBRE_ESTUDIANTES"]
-        .str.replace(r"\s+", " ", regex=True)
-        .str.strip()
-    )
-    df_proc["CURSO"] = "Curso " + df_proc["GRUPO"].astype(str)
+    for sheet in hojas_grados:
+      df = pd.read_excel(EXCEL_FILE, sheet_name=sheet)
+      # Buscar la fila donde se encuentran los encabezados reales (APELLIDO1 / NOMBRE1)
+      header_idx = None
+      for idx, row in df.iterrows():
+        row_str = str(row.values).upper()
+        if "APELLIDO" in row_str or "NOMBRE" in row_str:
+          header_idx = idx
+          break
 
-    # Seleccionar columnas requeridas
-    estudiantes = df_proc[["CURSO", "NOMBRE_ESTUDIANTES"]].dropna(
-        subset=["NOMBRE_ESTUDIANTES"]
-    )
-    return estudiantes
+      if header_idx is not None:
+        df.columns = df.iloc[header_idx]
+        df = df.iloc[header_idx + 1 :].copy()
+        df = df.loc[:, df.columns.notna()]
+
+        # Verificar columnas de nombres y apellidos
+        cols = [str(c).upper().strip() for c in df.columns]
+        n1 = next((c for c in df.columns if "NOMBRE1" in str(c).upper()), None)
+        n2 = next((c for c in df.columns if "NOMBRE2" in str(c).upper()), None)
+        a1 = next((c for c in df.columns if "APELLIDO1" in str(c).upper()), None)
+        a2 = next((c for c in df.columns if "APELLIDO2" in str(c).upper()), None)
+
+        if n1 and a1:
+          df["NOMBRE_ESTUDIANTES"] = (
+              df[n1].fillna("").astype(str)
+              + " "
+              + (df[n2].fillna("").astype(str) if n2 else "")
+              + " "
+              + df[a1].fillna("").astype(str)
+              + " "
+              + (df[a2].fillna("").astype(str) if a2 else "")
+          )
+          df["NOMBRE_ESTUDIANTES"] = (
+              df["NOMBRE_ESTUDIANTES"]
+              .str.replace(r"\s+", " ", regex=True)
+              .str.strip()
+          )
+          df["CURSO"] = sheet
+
+          sub_df = df[["CURSO", "NOMBRE_ESTUDIANTES"]].dropna(
+              subset=["NOMBRE_ESTUDIANTES"]
+          )
+          master_list.append(sub_df)
+
+    if master_list:
+      return pd.concat(master_list, ignore_index=True)
+    else:
+      return pd.DataFrame(columns=["CURSO", "NOMBRE_ESTUDIANTES"])
   except Exception as e:
     st.error(f"Error al leer el archivo Excel: {e}")
     return pd.DataFrame(columns=["CURSO", "NOMBRE_ESTUDIANTES"])
@@ -56,7 +83,10 @@ else:
   )
 
 st.title("📱 Control de Asistencia Escolar")
-st.write("Lleva el registro de retardos y fallas acumulado mes a mes.")
+st.write(
+    "Lleva el registro de retardos y fallas acumulado mes a mes desde tu"
+    " celular."
+)
 
 # --- MENÚ DE NAVEGACIÓN MÓVIL ---
 menu = st.radio(
@@ -72,11 +102,40 @@ if menu == "📝 Registrar Incidencia":
   if df_estudiantes.empty:
     st.warning("No se encontraron estudiantes en el archivo Excel.")
   else:
-    # Seleccionar Curso
-    cursos_disponibles = sorted(df_estudiantes["CURSO"].unique().tolist())
+    # Orden personalizado de los cursos del colegio
+    orden_cursos = [
+        "JARDÍN",
+        "TRANSICIÓN",
+        "PRIMERO",
+        "SEGUNDO",
+        "TERCERO",
+        "CUARTO",
+        "QUINTO",
+        "SEXTO",
+        "701",
+        "702",
+        "OCTAVO",
+        "901",
+        "902",
+        "DÉCIMO",
+        "ONCE",
+    ]
+    cursos_disponibles = [
+        c
+        for c in orden_cursos
+        if c in df_estudiantes["CURSO"].unique().tolist()
+    ]
+    # Agregar cualquier otro curso por si acaso
+    otros = [
+        c
+        for c in df_estudiantes["CURSO"].unique().tolist()
+        if c not in orden_cursos
+    ]
+    cursos_disponibles.extend(otros)
+
     curso_sel = st.selectbox("1. Selecciona el CURSO:", cursos_disponibles)
 
-    # Filtrar estudiantes de ese curso
+    # Filtrar estudiantes de ese curso ordenados alfabéticamente
     estudiantes_filtrados = sorted(
         df_estudiantes[df_estudiantes["CURSO"] == curso_sel][
             "NOMBRE_ESTUDIANTES"
@@ -107,7 +166,6 @@ if menu == "📝 Registrar Incidencia":
           "ANIO": [anio_actual],
       })
 
-      # Agregar al DataFrame existente y guardar en CSV persistente
       df_registros = pd.concat([df_registros, nuevo_reg], ignore_index=True)
       df_registros.to_csv(REGISTROS_FILE, index=False)
 
@@ -123,13 +181,11 @@ elif menu == "📊 Ver Acumulados y Reportes":
   if df_registros.empty:
     st.info("Aún no hay registros guardados en el sistema.")
   else:
-    # Filtro por año
     anios_disponibles = sorted(df_registros["ANIO"].unique().tolist())
     anio_filtro = st.selectbox("Filtrar por Año:", anios_disponibles)
 
     df_anio = df_registros[df_registros["ANIO"] == str(anio_filtro)]
 
-    # Filtro por mes (opcional o vista general)
     meses_disponibles = ["TODOS LOS MESES"] + sorted(
         df_anio["MES"].unique().tolist()
     )
@@ -145,7 +201,6 @@ elif menu == "📊 Ver Acumulados y Reportes":
     if df_filtrado.empty:
       st.warning("No hay registros para los filtros seleccionados.")
     else:
-      # Tabla resumen agrupada por Curso y Estudiante
       resumen = (
           df_filtrado.pivot_table(
               index=["CURSO", "NOMBRE_ESTUDIANTE"],
@@ -157,12 +212,10 @@ elif menu == "📊 Ver Acumulados y Reportes":
           .reset_index()
       )
 
-      # Asegurar columnas de Retardo y Falla si no existen
       for col in ["Retardo", "Falla"]:
         if col not in resumen.columns:
           resumen[col] = 0
 
-      # Calcular total de incidencias
       resumen["TOTAL_INCIDENCIAS"] = resumen["Retardo"] + resumen["Falla"]
       resumen = resumen.sort_values(
           by="TOTAL_INCIDENCIAS", ascending=False
@@ -170,8 +223,6 @@ elif menu == "📊 Ver Acumulados y Reportes":
 
       st.dataframe(resumen, use_container_width=True)
 
-      # Botón para descargar reporte en Excel
-      output = io.BytesIO() if "io" in globals() else None
       import io
 
       output = io.BytesIO()
@@ -195,4 +246,4 @@ elif menu == "📊 Ver Acumulados y Reportes":
       )
 
       with st.expander("Ver Historial Detallado"):
-        st.dataframe(df_filtrado, use_container_width=True) 
+        st.dataframe(df_filtrado, use_container_width=True)
