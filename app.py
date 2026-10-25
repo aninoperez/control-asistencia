@@ -12,6 +12,22 @@ st.set_page_config(
 EXCEL_FILE = "LISTAS OCTUBRE (1).xlsx"
 REGISTROS_FILE = "registros_asistencia.csv"
 
+# Diccionario de meses en español
+MESES_ES = {
+    1: "Enero",
+    2: "Febrero",
+    3: "Marzo",
+    4: "Abril",
+    5: "Mayo",
+    6: "Junio",
+    7: "Julio",
+    8: "Agosto",
+    9: "Septiembre",
+    10: "Octubre",
+    11: "Noviembre",
+    12: "Diciembre",
+}
+
 
 # --- CARGAR LISTA DE ESTUDIANTES DIRECTAMENTE DE LAS PESTAÑAS DEL EXCEL ---
 @st.cache_data
@@ -41,7 +57,7 @@ def cargar_estudiantes():
         a2 = next((c for c in df.columns if "APELLIDO2" in str(c).upper()), None)
 
         if n1 and a1:
-          df["NOMBRE_ESTUDIANTES"] = (
+          df["NOMBRE_ESTUDIANTE"] = (
               df[n1].fillna("").astype(str)
               + " "
               + (df[n2].fillna("").astype(str) if n2 else "")
@@ -50,25 +66,25 @@ def cargar_estudiantes():
               + " "
               + (df[a2].fillna("").astype(str) if a2 else "")
           )
-          df["NOMBRE_ESTUDIANTES"] = (
-              df["NOMBRE_ESTUDIANTES"]
+          df["NOMBRE_ESTUDIANTE"] = (
+              df["NOMBRE_ESTUDIANTE"]
               .str.replace(r"\s+", " ", regex=True)
               .str.strip()
           )
           df["CURSO"] = sheet
 
-          sub_df = df[["CURSO", "NOMBRE_ESTUDIANTES"]].dropna(
-              subset=["NOMBRE_ESTUDIANTES"]
+          sub_df = df[["CURSO", "NOMBRE_ESTUDIANTE"]].dropna(
+              subset=["NOMBRE_ESTUDIANTE"]
           )
           master_list.append(sub_df)
 
     if master_list:
       return pd.concat(master_list, ignore_index=True)
     else:
-      return pd.DataFrame(columns=["CURSO", "NOMBRE_ESTUDIANTES"])
+      return pd.DataFrame(columns=["CURSO", "NOMBRE_ESTUDIANTE"])
   except Exception as e:
     st.error(f"Error al leer el archivo Excel: {e}")
-    return pd.DataFrame(columns=["CURSO", "NOMBRE_ESTUDIANTES"])
+    return pd.DataFrame(columns=["CURSO", "NOMBRE_ESTUDIANTE"])
 
 
 df_estudiantes = cargar_estudiantes()
@@ -76,12 +92,17 @@ df_estudiantes = cargar_estudiantes()
 # --- CARGAR O INICIALIZAR REGISTROS HISTÓRICOS ---
 if os.path.exists(REGISTROS_FILE):
   df_registros = pd.read_csv(REGISTROS_FILE)
+  # Asegurar columnas estándar
+  if "MES" not in df_registros.columns or "ANIO" not in df_registros.columns:
+    df_registros = pd.DataFrame(
+        columns=["FECHA", "TIPO", "CURSO", "NOMBRE_ESTUDIANTE", "MES", "ANIO"]
+    )
 else:
   df_registros = pd.DataFrame(
       columns=["FECHA", "TIPO", "CURSO", "NOMBRE_ESTUDIANTE", "MES", "ANIO"]
   )
 
-# --- TÍTULO OFICIAL SOLICITUD ---
+# --- TÍTULO OFICIAL ---
 st.title("CONTROL DE ASISTENCIA ESCOLAR")
 st.subheader("COLEGIO GUILLERMO LEÓN VALENCIA I.E.D. - ENGATIVÁ")
 st.write(
@@ -136,7 +157,7 @@ if menu == "📝 Registrar Incidencia":
 
     estudiantes_filtrados = sorted(
         df_estudiantes[df_estudiantes["CURSO"] == curso_sel][
-            "NOMBRE_ESTUDIANTES"
+            "NOMBRE_ESTUDIANTE"
         ].tolist()
     )
     estudiante_sel = st.selectbox(
@@ -147,9 +168,10 @@ if menu == "📝 Registrar Incidencia":
         "3. Tipo de incidencia:", ["Retardo", "Falla"], horizontal=True
     )
 
-    fecha_hoy = datetime.now().strftime("%Y-%m-%d")
-    mes_actual = datetime.now().strftime("%B")
-    anio_actual = datetime.now().strftime("%Y")
+    now = datetime.now()
+    fecha_hoy = now.strftime("%Y-%m-%d")
+    mes_actual = MESES_ES.get(now.month, "Desconocido")
+    anio_actual = str(now.year)
 
     st.info(f"📅 Fecha de registro: {fecha_hoy} ({mes_actual} {anio_actual})")
 
@@ -178,6 +200,10 @@ elif menu == "📊 Ver Acumulados y Reportes":
   if df_registros.empty:
     st.info("Aún no hay registros guardados en el sistema.")
   else:
+    # Asegurar tipo string para evitar errores de filtro
+    df_registros["ANIO"] = df_registros["ANIO"].astype(str)
+    df_registros["MES"] = df_registros["MES"].astype(str)
+
     anios_disponibles = sorted(df_registros["ANIO"].unique().tolist())
     anio_filtro = st.selectbox("Filtrar por Año:", anios_disponibles)
 
@@ -200,7 +226,7 @@ elif menu == "📊 Ver Acumulados y Reportes":
     else:
       resumen = (
           df_filtrado.pivot_table(
-              index=["CURSO", "NOMBRE_ESTUDIANTES"],
+              index=["CURSO", "NOMBRE_ESTUDIANTE"],
               columns="TIPO",
               values="FECHA",
               aggfunc="count",
