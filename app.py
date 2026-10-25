@@ -92,13 +92,31 @@ df_estudiantes = cargar_estudiantes()
 # --- CARGAR O INICIALIZAR REGISTROS HISTÓRICOS ---
 if os.path.exists(REGISTROS_FILE):
   df_registros = pd.read_csv(REGISTROS_FILE)
+  if "HORA" not in df_registros.columns:
+    df_registros["HORA"] = "00:00"
   if "MES" not in df_registros.columns or "ANIO" not in df_registros.columns:
     df_registros = pd.DataFrame(
-        columns=["FECHA", "TIPO", "CURSO", "NOMBRE_ESTUDIANTE", "MES", "ANIO"]
+        columns=[
+            "FECHA",
+            "HORA",
+            "TIPO",
+            "CURSO",
+            "NOMBRE_ESTUDIANTE",
+            "MES",
+            "ANIO",
+        ]
     )
 else:
   df_registros = pd.DataFrame(
-      columns=["FECHA", "TIPO", "CURSO", "NOMBRE_ESTUDIANTE", "MES", "ANIO"]
+      columns=[
+          "FECHA",
+          "HORA",
+          "TIPO",
+          "CURSO",
+          "NOMBRE_ESTUDIANTE",
+          "MES",
+          "ANIO",
+      ]
   )
 
 # --- TÍTULO OFICIAL ---
@@ -169,14 +187,19 @@ if menu == "📝 Registrar Incidencia":
 
     now = datetime.now()
     fecha_hoy = now.strftime("%Y-%m-%d")
+    hora_actual = now.strftime("%H:%M")
     mes_actual = MESES_ES.get(now.month, "Desconocido")
     anio_actual = str(now.year)
 
-    st.info(f"📅 Fecha de registro: {fecha_hoy} ({mes_actual} {anio_actual})")
+    st.info(
+        f"📅 Fecha y Hora de registro: {fecha_hoy} a las {hora_actual} ({mes_actual}"
+        f" {anio_actual})"
+    )
 
     if st.button("Guardar Registro 💾", type="primary", use_container_width=True):
       nuevo_reg = pd.DataFrame({
           "FECHA": [fecha_hoy],
+          "HORA": [hora_actual],
           "TIPO": [tipo_sel],
           "CURSO": [curso_sel],
           "NOMBRE_ESTUDIANTE": [estudiante_sel],
@@ -189,7 +212,7 @@ if menu == "📝 Registrar Incidencia":
 
       st.success(
           f"✅ ¡Guardado! Se registró un **{tipo_sel}** para"
-          f" **{estudiante_sel}** ({curso_sel})."
+          f" **{estudiante_sel}** ({curso_sel}) a las {hora_actual}."
       )
 
 # --- 2. VER ACUMULADOS MES A MES Y AÑO ---
@@ -222,7 +245,6 @@ elif menu == "📊 Ver Acumulados y Reportes":
     if df_filtrado.empty:
       st.warning("No hay registros para los filtros seleccionados.")
     else:
-      # Resumen general agrupado por curso y estudiante
       resumen = (
           df_filtrado.pivot_table(
               index=["CURSO", "NOMBRE_ESTUDIANTE"],
@@ -249,16 +271,13 @@ elif menu == "📊 Ver Acumulados y Reportes":
 
       output = io.BytesIO()
       with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        # 1. Pestaña General
         resumen.to_excel(
             writer, index=False, sheet_name="Resumen_General"
         )
-        # 2. Pestaña de Detalle Completo
         df_filtrado.to_excel(
             writer, index=False, sheet_name="Detalle_Completo"
         )
 
-        # 3. Pestañas individuales por cada curso presente
         for curso_nombre in sorted(df_filtrado["CURSO"].unique()):
           df_curso = df_filtrado[df_filtrado["CURSO"] == curso_nombre]
           resumen_curso = (
@@ -281,7 +300,6 @@ elif menu == "📊 Ver Acumulados y Reportes":
               by="TOTAL_INCIDENCIAS", ascending=False
           ).reset_index(drop=True)
 
-          # Nombre limpio de pestaña (Excel permite máximo 31 caracteres)
           sheet_name_clean = str(curso_nombre).replace("/", "-")[:31]
           resumen_curso.to_excel(
               writer, index=False, sheet_name=sheet_name_clean
