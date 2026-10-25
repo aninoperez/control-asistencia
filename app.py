@@ -92,7 +92,6 @@ df_estudiantes = cargar_estudiantes()
 # --- CARGAR O INICIALIZAR REGISTROS HISTÓRICOS ---
 if os.path.exists(REGISTROS_FILE):
   df_registros = pd.read_csv(REGISTROS_FILE)
-  # Asegurar columnas estándar
   if "MES" not in df_registros.columns or "ANIO" not in df_registros.columns:
     df_registros = pd.DataFrame(
         columns=["FECHA", "TIPO", "CURSO", "NOMBRE_ESTUDIANTE", "MES", "ANIO"]
@@ -200,7 +199,6 @@ elif menu == "📊 Ver Acumulados y Reportes":
   if df_registros.empty:
     st.info("Aún no hay registros guardados en el sistema.")
   else:
-    # Asegurar tipo string para evitar errores de filtro
     df_registros["ANIO"] = df_registros["ANIO"].astype(str)
     df_registros["MES"] = df_registros["MES"].astype(str)
 
@@ -224,6 +222,7 @@ elif menu == "📊 Ver Acumulados y Reportes":
     if df_filtrado.empty:
       st.warning("No hay registros para los filtros seleccionados.")
     else:
+      # Resumen general agrupado por curso y estudiante
       resumen = (
           df_filtrado.pivot_table(
               index=["CURSO", "NOMBRE_ESTUDIANTE"],
@@ -250,16 +249,48 @@ elif menu == "📊 Ver Acumulados y Reportes":
 
       output = io.BytesIO()
       with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        # 1. Pestaña General
         resumen.to_excel(
-            writer, index=False, sheet_name="Acumulado_Asistencia"
+            writer, index=False, sheet_name="Resumen_General"
         )
+        # 2. Pestaña de Detalle Completo
         df_filtrado.to_excel(
             writer, index=False, sheet_name="Detalle_Completo"
         )
+
+        # 3. Pestañas individuales por cada curso presente
+        for curso_nombre in sorted(df_filtrado["CURSO"].unique()):
+          df_curso = df_filtrado[df_filtrado["CURSO"] == curso_nombre]
+          resumen_curso = (
+              df_curso.pivot_table(
+                  index=["CURSO", "NOMBRE_ESTUDIANTE"],
+                  columns="TIPO",
+                  values="FECHA",
+                  aggfunc="count",
+                  fill_value=0,
+              )
+              .reset_index()
+          )
+          for col in ["Retardo", "Falla"]:
+            if col not in resumen_curso.columns:
+              resumen_curso[col] = 0
+          resumen_curso["TOTAL_INCIDENCIAS"] = (
+              resumen_curso["Retardo"] + resumen_curso["Falla"]
+          )
+          resumen_curso = resumen_curso.sort_values(
+              by="TOTAL_INCIDENCIAS", ascending=False
+          ).reset_index(drop=True)
+
+          # Nombre limpio de pestaña (Excel permite máximo 31 caracteres)
+          sheet_name_clean = str(curso_nombre).replace("/", "-")[:31]
+          resumen_curso.to_excel(
+              writer, index=False, sheet_name=sheet_name_clean
+          )
+
       excel_data = output.getvalue()
 
       st.download_button(
-          label="📥 Descargar Reporte en Excel",
+          label="📥 Descargar Reporte en Excel (General + Pestañas por Curso)",
           data=excel_data,
           file_name=f"reporte_asistencia_{anio_filtro}.xlsx",
           mime=(
