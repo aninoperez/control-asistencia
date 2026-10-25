@@ -4,7 +4,9 @@ import pandas as pd
 import streamlit as st
 
 st.set_page_config(
-    page_title="Control de Retardos y Faltas", page_icon="📱", layout="centered"
+    page_title="Control de Asistencia - I.E.D. Guillermo León Valencia",
+    page_icon="📱",
+    layout="centered",
 )
 
 EXCEL_FILE = "LISTAS OCTUBRE (1).xlsx"
@@ -21,7 +23,6 @@ def cargar_estudiantes():
 
     for sheet in hojas_grados:
       df = pd.read_excel(EXCEL_FILE, sheet_name=sheet)
-      # Buscar la fila donde se encuentran los encabezados reales (APELLIDO1 / NOMBRE1)
       header_idx = None
       for idx, row in df.iterrows():
         row_str = str(row.values).upper()
@@ -34,8 +35,6 @@ def cargar_estudiantes():
         df = df.iloc[header_idx + 1 :].copy()
         df = df.loc[:, df.columns.notna()]
 
-        # Verificar columnas de nombres y apellidos
-        cols = [str(c).upper().strip() for c in df.columns]
         n1 = next((c for c in df.columns if "NOMBRE1" in str(c).upper()), None)
         n2 = next((c for c in df.columns if "NOMBRE2" in str(c).upper()), None)
         a1 = next((c for c in df.columns if "APELLIDO1" in str(c).upper()), None)
@@ -82,9 +81,11 @@ else:
       columns=["FECHA", "TIPO", "CURSO", "NOMBRE_ESTUDIANTE", "MES", "ANIO"]
   )
 
-st.title("📱 Control de Asistencia Escolar")
+# --- TÍTULO OFICIAL SOLICITUD ---
+st.title("CONTROL DE ASISTENCIA ESCOLAR")
+st.subheader("COLEGIO GUILLERMO LEÓN VALENCIA I.E.D. - ENGATIVÁ")
 st.write(
-    "Lleva el registro de retardos y fallas acumulado mes a mes desde tu"
+    "Lleva el control de retardos y fallas acumulado mes a mes desde tu"
     " celular."
 )
 
@@ -102,7 +103,6 @@ if menu == "📝 Registrar Incidencia":
   if df_estudiantes.empty:
     st.warning("No se encontraron estudiantes en el archivo Excel.")
   else:
-    # Orden personalizado de los cursos del colegio
     orden_cursos = [
         "JARDÍN",
         "TRANSICIÓN",
@@ -125,7 +125,6 @@ if menu == "📝 Registrar Incidencia":
         for c in orden_cursos
         if c in df_estudiantes["CURSO"].unique().tolist()
     ]
-    # Agregar cualquier otro curso por si acaso
     otros = [
         c
         for c in df_estudiantes["CURSO"].unique().tolist()
@@ -135,7 +134,6 @@ if menu == "📝 Registrar Incidencia":
 
     curso_sel = st.selectbox("1. Selecciona el CURSO:", cursos_disponibles)
 
-    # Filtrar estudiantes de ese curso ordenados alfabéticamente
     estudiantes_filtrados = sorted(
         df_estudiantes[df_estudiantes["CURSO"] == curso_sel][
             "NOMBRE_ESTUDIANTES"
@@ -145,13 +143,12 @@ if menu == "📝 Registrar Incidencia":
         "2. Selecciona el ESTUDIANTE:", estudiantes_filtrados
     )
 
-    # Tipo de incidencia
     tipo_sel = st.radio(
         "3. Tipo de incidencia:", ["Retardo", "Falla"], horizontal=True
     )
 
     fecha_hoy = datetime.now().strftime("%Y-%m-%d")
-    mes_actual = datetime.now().strftime("%B")  # Nombre del mes
+    mes_actual = datetime.now().strftime("%B")
     anio_actual = datetime.now().strftime("%Y")
 
     st.info(f"📅 Fecha de registro: {fecha_hoy} ({mes_actual} {anio_actual})")
@@ -203,7 +200,7 @@ elif menu == "📊 Ver Acumulados y Reportes":
     else:
       resumen = (
           df_filtrado.pivot_table(
-              index=["CURSO", "NOMBRE_ESTUDIANTE"],
+              index=["CURSO", "NOMBRE_ESTUDIANTES"],
               columns="TIPO",
               values="FECHA",
               aggfunc="count",
