@@ -126,10 +126,6 @@ else:
 # --- TÍTULO OFICIAL ---
 st.title("CONTROL DE ASISTENCIA ESCOLAR")
 st.subheader("COLEGIO GUILLERMO LEÓN VALENCIA I.E.D. - ENGATIVÁ")
-st.write(
-    "Lleva el control de retardos y fallas acumulado mes a mes desde tu"
-    " celular."
-)
 
 # --- MENÚ DE NAVEGACIÓN MÓVIL ---
 menu = st.radio(
@@ -189,7 +185,6 @@ if menu == "📝 Registrar Incidencia":
         "3. Tipo de incidencia:", ["Retardo", "Falla"], horizontal=True
     )
 
-    # Obtener fecha y hora exacta ajustada a Colombia (UTC-5)
     now = datetime.now(ZONA_BOGOTA)
     fecha_hoy = now.strftime("%Y-%m-%d")
     hora_actual = now.strftime("%H:%M")
