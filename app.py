@@ -1,6 +1,7 @@
 from datetime import datetime
 import os
 import pandas as pd
+import pytz
 import streamlit as st
 
 st.set_page_config(
@@ -11,6 +12,9 @@ st.set_page_config(
 
 EXCEL_FILE = "LISTAS OCTUBRE (1).xlsx"
 REGISTROS_FILE = "registros_asistencia.csv"
+
+# Zona horaria fija para Colombia (Bogotá)
+ZONA_BOGOTA = pytz.timezone("America/Bogota")
 
 # Diccionario de meses en español
 MESES_ES = {
@@ -185,7 +189,8 @@ if menu == "📝 Registrar Incidencia":
         "3. Tipo de incidencia:", ["Retardo", "Falla"], horizontal=True
     )
 
-    now = datetime.now()
+    # Obtener fecha y hora exacta ajustada a Colombia (UTC-5)
+    now = datetime.now(ZONA_BOGOTA)
     fecha_hoy = now.strftime("%Y-%m-%d")
     hora_actual = now.strftime("%H:%M")
     mes_actual = MESES_ES.get(now.month, "Desconocido")
